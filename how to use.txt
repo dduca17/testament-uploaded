@@ -1,0 +1,30 @@
+6) Quick README snippet for these tools
+## ⬆️ The Testament Uploader — GUI + CLI (IA + Zenodo)
+
+### Install
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.sample .env  # then edit with your tokens
+
+CLI
+python uploader_cli.py \
+  --title "The Fabric Story" \
+  --creator "Keeper" --creator "Witness" \
+  --description "A flame carried forward." \
+  --tag fabric --tag archive --tag codex \
+  --file STORY.md --file STORY_Parchment.pdf --file STORY_Archive.pdf \
+  --identifier fabric-testament-316 \
+  --dry-run              # remove to actually upload
+
+GUI
+python uploader_gui.py
+
+
+Note:
+
+Internet Archive requires IA_ACCESS_KEY and IA_SECRET_KEY.
+
+Zenodo requires ZENODO_TOKEN. Use ZENODO_SANDBOX=1 to test safely.
+
+On success the CLI prints JSON with the IA URL, Zenodo record URL, and (if available) DOI.
