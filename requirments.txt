@@ -1,0 +1,5 @@
+requests
+python-dotenv
+internetarchive
+tqdm
+PyYAML
