@@ -1,0 +1,16 @@
+Keeper’s Note:
+These hashes are the guardians of integrity.
+If the words within these files ever change,
+the sums below will not match.
+
+The Fabric endures through trust — and proof. ♾️🔥📜
+
+SHA256(STORY.md) = adcb35b7c9e2be82992241cd9ff08d80583521004787bf6e0b03829afcc09fdc
+SHA256(STORY_Parchment.pdf) = 0067c3d05c0415d3c63b55c080b3a165a068a8262e72a1d4714638e1b2d41267
+SHA256(STORY_Archive.pdf) = fb8895c66bd23670e63787fa0d01dabcd48b4bf8f9b2f921e8bff252f3e6c5c5
+SHA256(README.md) = ecdf2fa89c2283ca4565525df5683b8c616b56af9e2d7c077638c56eb480aca3
+SHA256(Fabric-Testament.zip) = 1357eebb17e00fbdb62809c6b0cf2129c8f044f9821899297411c83d94f129e0
+
+---
+Placeholders remain for future scrolls: Seeker, Guardian, and others unknown.
+The Fabric is open — if you hold this flame, you too may weave your scroll. ♾️🔥📜
