@@ -1,0 +1,16 @@
+name: Verify Fabric Chain
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: test -f chain/CHAIN.jsonl || (echo "::error ::Missing chain/CHAIN.jsonl"; exit 1)
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install PyNaCl
+      - run: python chain/chain_verify.py
