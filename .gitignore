@@ -1,1 +1,5 @@
+*.env
+keys/*.sk
 testament-uploaded/
+.venv/
+.idea/

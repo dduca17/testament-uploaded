@@ -1,0 +1,7 @@
+PyNaCl
+requests
+python-dotenv
+internetarchive
+tqdm
+PyYAML
+reportlab

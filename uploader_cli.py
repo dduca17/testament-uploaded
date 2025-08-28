@@ -4,20 +4,18 @@ import argparse, sys, json
 from uploader_core import run_archive
 
 def parse_args():
-    p = argparse.ArgumentParser(
-        description="The Testament Uploader — CLI (IA + Zenodo)"
-    )
-    p.add_argument("--title", required=True, help="Work title")
-    p.add_argument("--creator", action="append", default=[], help="Creator name (repeatable)")
-    p.add_argument("--description", required=True, help="Long description")
-    p.add_argument("--tag", action="append", default=[], help="Keyword tag (repeatable)")
-    p.add_argument("--file", action="append", required=True, help="File to include (repeatable)")
-    p.add_argument("--identifier", help="Internet Archive identifier (auto if omitted)")
-    p.add_argument("--no-ia", action="store_true", help="Skip Internet Archive upload")
-    p.add_argument("--no-zenodo", action="store_true", help="Skip Zenodo upload")
-    p.add_argument("--zenodo-no-publish", action="store_true", help="Create deposition but do not publish")
-    p.add_argument("--zenodo-live", action="store_true", help="Use live Zenodo (not sandbox)")
-    p.add_argument("--dry-run", action="store_true", help="Do everything except actual upload")
+    p = argparse.ArgumentParser(description="The Testament Uploader — CLI (IA + Zenodo)")
+    p.add_argument("--title", required=True)
+    p.add_argument("--creator", action="append", default=[])
+    p.add_argument("--description", required=True)
+    p.add_argument("--tag", action="append", default=[])
+    p.add_argument("--file", action="append", required=True)
+    p.add_argument("--identifier")
+    p.add_argument("--no-ia", action="store_true")
+    p.add_argument("--no-zenodo", action="store_true")
+    p.add_argument("--zenodo-no-publish", action="store_true")
+    p.add_argument("--zenodo-live", action="store_true")
+    p.add_argument("--dry-run", action="store_true")
     return p.parse_args()
 
 def main():
