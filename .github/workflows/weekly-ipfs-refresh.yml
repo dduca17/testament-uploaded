@@ -12,6 +12,10 @@ permissions:
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    env:
+      WEB3_STORAGE_TOKEN: ${{ secrets.WEB3_STORAGE_TOKEN }}
+      PINATA_JWT: ${{ secrets.PINATA_JWT }}
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -30,15 +34,13 @@ jobs:
           python chain/chain_verify.py
 
       - name: Pin to IPFS (web3.storage)
-        if: ${{ secrets.WEB3_STORAGE_TOKEN }}
-        env:
-          WEB3_STORAGE_TOKEN: ${{ secrets.WEB3_STORAGE_TOKEN }}
+        if: ${{ env.WEB3_STORAGE_TOKEN != '' }}
         shell: bash
         run: |
           set -e
           RESP=$(curl -sS -X POST https://api.web3.storage/upload \
             -H "Authorization: Bearer ${WEB3_STORAGE_TOKEN}" \
-            -F "file=@chain/CHAIN.jsonl")
+            -F file=@chain/CHAIN.jsonl)
           CID=$(echo "$RESP" | python -c 'import sys,json; print(json.load(sys.stdin).get("cid",""))')
           if [ -n "$CID" ]; then
             echo "CID=$CID" >> "$GITHUB_ENV"
@@ -52,9 +54,7 @@ jobs:
           fi
 
       - name: Pin to IPFS (Pinata)
-        if: ${{ secrets.PINATA_JWT }}
-        env:
-          PINATA_JWT: ${{ secrets.PINATA_JWT }}
+        if: ${{ env.PINATA_JWT != '' }}
         shell: bash
         run: |
           set -e
@@ -74,7 +74,7 @@ jobs:
           fi
 
       - name: Commit CID file
-        if: ${{ env.CID || env.PINATA_CID }}
+        if: ${{ env.CID != '' || env.PINATA_CID != '' }}
         shell: bash
         run: |
           set -e
