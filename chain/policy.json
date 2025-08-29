@@ -1,0 +1,4 @@
+{
+  "threshold": 2,
+  "allowed_signers": ["Keeper", "Guardian", "Seeker"]
+}
