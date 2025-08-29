@@ -2,17 +2,16 @@ name: Resilience Mirror IPFS
 
 on:
   push:
-    branches: [ main ]
+    branches: [ "main" ]
   workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
 
 jobs:
   mirror:
     runs-on: ubuntu-latest
-    # Needed if we commit chain/CID.txt back to the repo
-    permissions:
-      contents: write
-      actions: read
-
     steps:
       - uses: actions/checkout@v4
         with:
@@ -38,54 +37,59 @@ jobs:
           if-no-files-found: error
 
       - name: Pin to IPFS (web3.storage)
-        if: ${{ secrets.WEB3_STORAGE_TOKEN != '' }}
+        if: ${{ secrets.WEB3_STORAGE_TOKEN }}
         env:
           WEB3_STORAGE_TOKEN: ${{ secrets.WEB3_STORAGE_TOKEN }}
+        shell: bash
         run: |
-          RESP="$(curl -sS -X POST https://api.web3.storage/upload \
+          set -e
+          RESP=$(curl -sS -X POST https://api.web3.storage/upload \
             -H "Authorization: Bearer ${WEB3_STORAGE_TOKEN}" \
-            -F "file=@chain/CHAIN.jsonl")"
-          python - <<'PY'
-import json, os, sys
-resp = json.loads(os.environ.get("RESP","{}"))
-cid = resp.get("cid")
-if not cid:
-    print("::warning ::web3.storage did not return a CID")
-    sys.exit(0)
-print(f"CID={cid}")
-open(os.environ["GITHUB_ENV"], "a").write(f"CID={cid}\n")
-open(os.environ["GITHUB_STEP_SUMMARY"], "a").write(f"## IPFS (web3.storage)\n- **CID:** `{cid}`\n- **Gateway:** https://w3s.link/ipfs/{cid}\n")
-PY
+            -F "file=@chain/CHAIN.jsonl")
+          CID=$(echo "$RESP" | python -c 'import sys,json; print(json.load(sys.stdin).get("cid",""))')
+          if [ -n "$CID" ]; then
+            echo "CID=$CID" >> "$GITHUB_ENV"
+            {
+              echo "## IPFS (web3.storage)"
+              echo "- CID: \`$CID\`"
+              echo "- Gateway: https://w3s.link/ipfs/$CID"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning ::web3.storage did not return a CID"
+          fi
 
       - name: Pin to IPFS (Pinata)
-        if: ${{ secrets.PINATA_JWT != '' }}
+        if: ${{ secrets.PINATA_JWT }}
         env:
           PINATA_JWT: ${{ secrets.PINATA_JWT }}
+        shell: bash
         run: |
-          RESP="$(curl -sS -X POST 'https://api.pinata.cloud/pinning/pinFileToIPFS' \
+          set -e
+          RESP=$(curl -sS -X POST 'https://api.pinata.cloud/pinning/pinFileToIPFS' \
             -H "Authorization: Bearer ${PINATA_JWT}" \
-            -F file=@chain/CHAIN.jsonl)"
-          python - <<'PY'
-import json, os, sys
-resp = json.loads(os.environ.get("RESP","{}"))
-cid = resp.get("IpfsHash")
-if not cid:
-    print("::warning ::Pinata did not return a CID")
-    sys.exit(0)
-print(f"PINATA_CID={cid}")
-open(os.environ["GITHUB_ENV"], "a").write(f"PINATA_CID={cid}\n")
-open(os.environ["GITHUB_STEP_SUMMARY"], "a").write(f"## IPFS (Pinata)\n- **CID:** `{cid}`\n- **Gateway:** https://gateway.pinata.cloud/ipfs/{cid}\n")
-PY
+            -F file=@chain/CHAIN.jsonl)
+          PINATA_CID=$(echo "$RESP" | python -c 'import sys,json; print(json.load(sys.stdin).get("IpfsHash",""))')
+          if [ -n "$PINATA_CID" ]; then
+            echo "PINATA_CID=$PINATA_CID" >> "$GITHUB_ENV"
+            {
+              echo "## IPFS (Pinata)"
+              echo "- CID: \`$PINATA_CID\`"
+              echo "- Gateway: https://gateway.pinata.cloud/ipfs/$PINATA_CID"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning ::Pinata did not return a CID"
+          fi
 
       - name: Commit CID file
-        # Commit if we got a CID from either pinning service
-        if: ${{ (env.CID != '' || env.PINATA_CID != '') }}
+        if: ${{ env.CID || env.PINATA_CID }}
+        shell: bash
         run: |
+          set -e
           mkdir -p chain
           {
             echo "Last refresh: $(date -u +%FT%TZ)"
-            [ -n "${CID}" ] && echo "web3.storage: ${CID}"
-            [ -n "${PINATA_CID}" ] && echo "pinata: ${PINATA_CID}"
+            [ -n "${CID:-}" ] && echo "web3.storage: ${CID}"
+            [ -n "${PINATA_CID:-}" ] && echo "pinata: ${PINATA_CID}"
           } > chain/CID.txt
           if ! git diff --quiet -- chain/CID.txt 2>/dev/null; then
             git config user.name  "github-actions[bot]"
