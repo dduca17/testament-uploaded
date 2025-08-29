@@ -1,0 +1,99 @@
+name: Resilience — Mirror & IPFS
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  resilience:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Verify ledger first
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install PyNaCl
+      - name: Verify ledger
+        run: |
+          test -f chain/CHAIN.jsonl || (echo "::error ::Missing chain/CHAIN.jsonl"; exit 1)
+          python chain/chain_verify.py
+
+      # Upload exact ledger as artifact
+      - name: Upload ledger artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fabric-ledger-${{ github.sha }}
+          path: chain/CHAIN.jsonl
+          if-no-files-found: error
+
+      # Pin to IPFS via web3.storage (set secret WEB3_STORAGE_TOKEN)
+      - name: Pin to IPFS (web3.storage)
+        if: ${{ secrets.WEB3_STORAGE_TOKEN != '' }}
+        env:
+          WEB3_STORAGE_TOKEN: ${{ secrets.WEB3_STORAGE_TOKEN }}
+        run: |
+          RESP=$(curl -sS -X POST https://api.web3.storage/upload \
+            -H "Authorization: Bearer ${WEB3_STORAGE_TOKEN}" \
+            -F "file=@chain/CHAIN.jsonl")
+          CID=$(python - <<'PY'
+import json, os
+j=json.loads(os.environ["RESP"])
+print(j.get("cid",""))
+PY
+)
+          if [ -n "$CID" ]; then
+            echo "CID=$CID" >> $GITHUB_ENV
+            echo "## IPFS (web3.storage)\n- **CID:** \`$CID\`\n- **Gateway:** https://w3s.link/ipfs/$CID" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "::warning ::web3.storage did not return a CID"
+          fi
+
+      # Pin to IPFS via Pinata (set secret PINATA_JWT)
+      - name: Pin to IPFS (Pinata)
+        if: ${{ secrets.PINATA_JWT != '' }}
+        env:
+          PINATA_JWT: ${{ secrets.PINATA_JWT }}
+        run: |
+          RESP=$(curl -sS -X POST 'https://api.pinata.cloud/pinning/pinFileToIPFS' \
+            -H "Authorization: Bearer ${PINATA_JWT}" \
+            -F file=@chain/CHAIN.jsonl)
+          CID=$(python - <<'PY'
+import json, os
+j=json.loads(os.environ["RESP"])
+print(j.get("IpfsHash",""))
+PY
+)
+          if [ -n "$CID" ]; then
+            echo "PINATA_CID=$CID" >> $GITHUB_ENV
+            echo "## IPFS (Pinata)\n- **CID:** \`$CID\`\n- **Gateway:** https://gateway.pinata.cloud/ipfs/$CID" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "::warning ::Pinata did not return a CID"
+          fi
+
+      # Optionally commit latest web3.storage CID to repo to make it discoverable (guard against loops)
+      - name: Commit CID file
+        if: ${{ env.CID != '' && github.actor != 'github-actions[bot]' }}
+        run: |
+          echo "$CID" > chain/CID.txt
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add chain/CID.txt
+          git commit -m "chore(chain): update latest IPFS CID [skip ci]" || exit 0
+          git push
+
+      # Mirror repo to GitLab (set secrets/vars)
+      - name: Mirror to GitLab
+        if: ${{ secrets.GITLAB_TOKEN != '' && vars.GITLAB_REPO != '' }}
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+          GITLAB_REPO:  ${{ vars.GITLAB_REPO }}   # e.g. "yourname/testament-uploaded"
+          GITLAB_HOST:  ${{ vars.GITLAB_HOST }}   # optional, default gitlab.com
+        run: |
+          HOST="${GITLAB_HOST:-gitlab.com}"
+          git remote add gitlab "https://oauth2:${GITLAB_TOKEN}@${HOST}/${GITLAB_REPO}.git" || true
+          git push --mirror gitlab
