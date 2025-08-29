@@ -1,0 +1,104 @@
+name: Weekly IPFS Refresh
+
+on:
+  schedule:
+    - cron: "0 0 * * 0"   # every Sunday 00:00 UTC
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Verify the ledger to avoid pinning a broken file
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install PyNaCl
+      - name: Verify ledger
+        run: |
+          test -f chain/CHAIN.jsonl || (echo "::error ::Missing chain/CHAIN.jsonl"; exit 1)
+          python chain/chain_verify.py
+
+      # Re-pin via web3.storage
+      - name: Pin to IPFS (web3.storage)
+        id: w3s
+        if: ${{ secrets.WEB3_STORAGE_TOKEN != '' }}
+        env:
+          WEB3_STORAGE_TOKEN: ${{ secrets.WEB3_STORAGE_TOKEN }}
+        run: |
+          RESP=$(curl -sS -X POST https://api.web3.storage/upload \
+            -H "Authorization: Bearer ${WEB3_STORAGE_TOKEN}" \
+            -F "file=@chain/CHAIN.jsonl")
+          CID=$(python - <<'PY'
+import json, os
+j=json.loads(os.environ["RESP"])
+print(j.get("cid",""))
+PY
+)
+          echo "cid=$CID" >> "$GITHUB_OUTPUT"
+          if [ -n "$CID" ]; then
+            {
+              echo "## Weekly IPFS Refresh (web3.storage)"
+              echo "- CID: \`$CID\`"
+              echo "- Gateway: https://w3s.link/ipfs/$CID"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning ::web3.storage did not return a CID"
+          fi
+
+      # Re-pin via Pinata
+      - name: Pin to IPFS (Pinata)
+        id: pinata
+        if: ${{ secrets.PINATA_JWT != '' }}
+        env:
+          PINATA_JWT: ${{ secrets.PINATA_JWT }}
+        run: |
+          RESP=$(curl -sS -X POST 'https://api.pinata.cloud/pinning/pinFileToIPFS' \
+            -H "Authorization: Bearer ${PINATA_JWT}" \
+            -F file=@chain/CHAIN.jsonl)
+          CID=$(python - <<'PY'
+import json, os
+j=json.loads(os.environ["RESP"])
+print(j.get("IpfsHash",""))
+PY
+)
+          echo "cid=$CID" >> "$GITHUB_OUTPUT"
+          if [ -n "$CID" ]; then
+            {
+              echo "## Weekly IPFS Refresh (Pinata)"
+              echo "- CID: \`$CID\`"
+              echo "- Gateway: https://gateway.pinata.cloud/ipfs/$CID"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning ::Pinata did not return a CID"
+          fi
+
+      # Write latest CIDs to chain/CID.txt and commit (skip CI to avoid loops)
+      - name: Commit CID file
+        if: ${{ (steps.w3s.outputs.cid != '' || steps.pinata.outputs.cid != '') && github.actor != 'github-actions[bot]' }}
+        run: |
+          mkdir -p chain
+          TS=$(date -u +%FT%TZ)
+          {
+            echo "Last refresh: $TS"
+            if [ -n "${{ steps.w3s.outputs.cid }}" ]; then
+              echo "web3.storage: ${{ steps.w3s.outputs.cid }}"
+            fi
+            if [ -n "${{ steps.pinata.outputs.cid }}" ]; then
+              echo "pinata: ${{ steps.pinata.outputs.cid }}"
+            fi
+          } > chain/CID.txt
+
+          if ! git diff --quiet -- chain/CID.txt 2>/dev/null; then
+            git config user.name  "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add chain/CID.txt
+            git commit -m "chore(chain): update latest IPFS CID [skip ci]"
+            git push
+          else
+            echo "CID.txt unchanged; skipping commit."
+          fi
